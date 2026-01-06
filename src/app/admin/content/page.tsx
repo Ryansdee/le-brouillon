@@ -159,7 +159,7 @@ export default function AdminDashboard() {
           </div>
           <div className="p-10 space-y-6">
             {!user ? (
-              <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className="w-full py-4 bg-white border-2 border-neutral-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:border-[#a189f2] transition-all">
+              <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className="w-full py-4 bg-white border-2 text-black border-neutral-100 cursor-pointer rounded-2xl font-bold flex items-center justify-center gap-3 hover:border-[#a189f2] transition-all">
                 Se connecter avec Google
               </button>
             ) : (
