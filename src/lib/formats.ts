@@ -77,10 +77,9 @@ export const FORMATS: Record<FormatKey, Format> = {
     // Questions communes à TOUS les sous-formats BTB
     commonQuestions: [
       { id: "wattpad", label: "Pseudo Wattpad", type: "text" },
-      { id: "talks_about_book", label: "Je parle de mon roman dans ce post", type: "checkbox" },
-      { id: "cover", label: "Couverture de ton roman (si tu en parles)", type: "image" },
-      { id: "book_title", label: "Titre de ton roman (si tu en parles)", type: "text" },
-      { id: "socials", label: "Autres réseaux sociaux (TikTok, Instagram, Fyctia) — indique « / » si non applicable", type: "text" },
+      { id: "talks_about_book", label: "Je souhaite parler de mon roman dans ce post (optionnel)", type: "checkbox" },
+      { id: "cover", label: "Couverture de ton roman", type: "image" },
+      { id: "book_title", label: "Titre de ton roman", type: "text" },
     ],
     
     // Configuration détaillée pour chaque sous-format
@@ -92,21 +91,15 @@ export const FORMATS: Record<FormatKey, Format> = {
         questions: [
           { 
             id: "advice_topic", 
-            label: "Quel conseil veux-tu partager ?", 
+            label: "Quel conseil ou thème souhaites-tu aborder ?", 
             type: "text",
-            placeholder: "Ex: Comment créer des personnages crédibles, Gérer le syndrome de la page blanche..."
+            placeholder: "Ex: Le syndrome de la page blanche, comment parler d'un sujet sensible, créer des personnages crédibles..."
           },
           { 
             id: "advice_content", 
-            label: "Développe tes conseils (ton expérience, ce qui a marché pour toi)", 
+            label: "Merci d'élaborer 3 à 5 conseils", 
             type: "textarea",
-            placeholder: "Partage ton processus, tes astuces, ce que tu as appris..."
-          },
-          { 
-            id: "advice_target", 
-            label: "À qui s'adresse ce conseil ? (débutants, auteurs confirmés, tous...)", 
-            type: "text",
-            placeholder: "Ex: Tous les auteurs, Débutants, Auteurs de romance..."
+            placeholder: "Partage tes conseils détaillés, ton processus, ce qui a marché pour toi..."
           },
         ]
       },
