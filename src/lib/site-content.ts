@@ -115,6 +115,7 @@ export const defaultContent: SiteContent = {
     meet_author: "Requis : une photo de toi (ou qui te représente) et la couverture de ton roman. Les images peuvent être téléchargées ici ou envoyées par DM.",
     story_week: "Photo requise : la couverture de ton roman",
     behind_brouillon: "Les questions s'adaptent selon le type de post choisi",
+    other: "Les questions s'adaptent selon le type de post choisi",
   },
 
   // Progress labels
