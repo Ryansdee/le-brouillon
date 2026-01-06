@@ -55,28 +55,37 @@ export default function Page() {
   const [submitted, setSubmitted] = useState(false)
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
 
-  useEffect(() => {
-    const loadAllData = async () => {
-      setLoading(true)
-      try {
-        const contentSnap = await getDoc(doc(db, "settings", "site-content"))
-        if (contentSnap.exists()) {
-          setSiteContent({ ...defaultContent, ...contentSnap.data() as SiteContent })
-        }
-
-        const formatsSnap = await getDoc(doc(db, "settings", "formats"))
-        if (formatsSnap.exists()) {
-          setAllFormats(formatsSnap.data())
-        }
-      } catch (e) {
-        console.error("Erreur chargement données Firebase:", e)
-      } finally {
-        setLoading(false)
+useEffect(() => {
+  const loadAllData = async () => {
+    setLoading(true)
+    try {
+      const contentSnap = await getDoc(doc(db, "settings", "site-content"))
+      if (contentSnap.exists()) {
+        setSiteContent({ ...defaultContent, ...contentSnap.data() as SiteContent })
       }
+
+      const formatsSnap = await getDoc(doc(db, "settings", "formats"))
+      if (formatsSnap.exists()) {
+        setAllFormats(formatsSnap.data())
+      }
+
+      const blockedSnap = await getDoc(doc(db, "settings", "blocked-dates"))
+      if (blockedSnap.exists()) {
+        setBlockedDates(blockedSnap.data().dates || [])
+      }
+
+    } catch (e) {
+      console.error("Erreur chargement données Firebase:", e)
+    } finally {
+      setLoading(false)
     }
-    loadAllData()
-  }, [])
+  }
+
+  loadAllData()
+}, [])
+
 
   const getDynamicQuestions = () => {
     if (!format || !allFormats[format]) return []
@@ -110,7 +119,16 @@ export default function Page() {
     ? activeFormatConfig?.subformatConfigs?.[subformat] 
     : null
 
-  const isFormValid = instagram && format && date && (format !== "behind_brouillon" || subformat)
+
+  const isDateAllowed = date && activeFormatConfig?.days 
+  ? activeFormatConfig.days.includes(new Date(date).getDay()) 
+  : true;
+  const isFormValid = 
+  instagram && 
+  format && 
+  date && 
+  isDateAllowed && // <--- Sécurité supplémentaire
+  (format !== "behind_brouillon" || subformat);
 
   const submit = async () => {
     if (!isFormValid) return
@@ -324,13 +342,21 @@ export default function Page() {
             </section>
           )}
 
-          <section className="bg-white p-8 rounded-[2rem] border border-purple-50 shadow-sm">
-            <div className="flex items-center gap-5 mb-8">
-              <span className="flex-shrink-0 w-10 h-10 bg-[#f3f0ff] text-[#a189f2] rounded-full flex items-center justify-center font-bold text-lg">4</span>
-              <h2 className="text-xl font-serif font-bold text-neutral-800">{siteContent.progressSteps.date}</h2>
-            </div>
-            <CustomCalendar selectedDate={date} onSelectDate={setDate} allowedDays={activeFormatConfig?.days || []} format={format} />
-          </section>
+      <section className="bg-white p-8 rounded-[2rem] border border-purple-50 shadow-sm">
+        <div className="flex items-center gap-5 mb-8">
+          <span className="flex-shrink-0 w-10 h-10 bg-[#f3f0ff] text-[#a189f2] rounded-full flex items-center justify-center font-bold text-lg">4</span>
+          <h2 className="text-xl font-serif font-bold text-neutral-800">{siteContent.progressSteps.date}</h2>
+        </div>
+        
+        {/* La clé 'key' force React à détruire et recréer le calendrier quand le format change */}
+        <CustomCalendar 
+          key={format} 
+          selectedDate={date} 
+          onSelectDate={setDate} 
+          allowedDays={activeFormatConfig?.days || []} 
+          format={format} 
+        />
+      </section>
 
           <div className="pt-8">
             <button 
