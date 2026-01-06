@@ -267,7 +267,6 @@ const blockDate = async (manualDate?: string) => {
             <p className="text-[#b79ff8] text-xs mt-1 uppercase tracking-widest font-semibold">Le Brouillon</p>
           </div>
         </div>
-
           <nav className="space-y-1">
             <SidebarItem 
               icon={BarChart3} label="Vue générale" active={activeTab === "overview"} 
@@ -282,15 +281,25 @@ const blockDate = async (manualDate?: string) => {
               onClick={() => { setActiveTab("dates"); setMobileMenuOpen(false); }} 
             />
             
-            {/* AJOUT DU LIEN VERS LE CONTENU ICI */}
             <div className="pt-4 mt-4 border-t border-[#b79ff8]/10">
               <p className="px-4 mb-2 text-[10px] font-black uppercase tracking-widest text-[#b79ff8]">Ressources</p>
+              
+              {/* LIEN EXISTANT VERS LE CONTENU */}
               <a 
                 href="/admin/content" 
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#b79ff8] hover:bg-[#b79ff8]/10 hover:text-[#a189f2] transition-all duration-200 group"
               >
-                <File className="w-5 h-5 text-[#b79ff8] group-hover:text-[#a189f2]" strokeWidth={1.5} />
+                <File className="w-5 h-5" strokeWidth={1.5} />
                 <span className="font-bold text-sm">Gérer le contenu</span>
+              </a>
+
+              {/* NOUVEAU LIEN VERS LE PARAMÉTRAGE DES QUESTIONS */}
+              <a 
+                href="/admin/questions-settings" 
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#b79ff8] hover:bg-[#b79ff8]/10 hover:text-[#a189f2] transition-all duration-200 group"
+              >
+                <Sparkles className="w-5 h-5" strokeWidth={1.5} />
+                <span className="font-bold text-sm">Réglages Formulaires</span>
               </a>
             </div>
           </nav>
