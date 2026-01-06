@@ -63,6 +63,19 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+
+const getDaysInMonth = (date: Date) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1).getDay(); // 0 (Dim) à 6 (Sam)
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  // Ajustement pour commencer par Lundi (0=Lun, 6=Dim)
+  const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+  
+  return { startOffset, daysInMonth, year, month };
+};
 
   // Monitor Auth State
   useEffect(() => {
@@ -136,12 +149,36 @@ export default function AdminDashboard() {
     setExpandedSubmissions(s)
   }
 
-  const blockDate = async () => {
-    if (!date) return
-    await addDoc(collection(db, "blocked_dates"), { date })
-    setDate("")
-    loadData()
+const blockDate = async (manualDate?: string) => {
+  const dateToBlock = manualDate || date; // Utilise la date passée ou celle du state
+  if (!dateToBlock) return;
+
+  // 1. Vérifier si la date est déjà occupée (Admin ou Client)
+  const isAlreadyOccupied = blockedDates.some(d => d.date === dateToBlock);
+  if (isAlreadyOccupied) {
+    alert("Cette date est déjà occupée ou bloquée.");
+    return;
   }
+
+  try {
+    const docRef = await addDoc(collection(db, "blocked_dates"), {
+      date: dateToBlock,
+      createdAt: new Date().toISOString()
+    });
+    
+    // Mettre à jour l'état local immédiatement
+    setBlockedDates(prev => [...prev, { 
+      id: docRef.id, 
+      date: dateToBlock, 
+      type: 'admin', 
+      label: 'Administrateur' 
+    }].sort((a,b) => a.date.localeCompare(b.date)));
+    
+    if(!manualDate) setDate(""); // Reset le champ si c'était manuel
+  } catch (error) {
+    console.error("Erreur blocage:", error);
+  }
+};
 
   const unblockDate = async (id: string) => {
     await deleteDoc(doc(db, "blocked_dates", id))
@@ -425,133 +462,96 @@ export default function AdminDashboard() {
 
               {/* DATES BLOQUÉES */}
               {activeTab === "dates" && (
-                <div className="space-y-8 max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-8 max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
                   
-                  {/* Section : Action Rapide */}
-                  <div className="bg-white rounded-[2.5rem] border border-[#b79ff8]/20 p-8 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#b79ff8]/5 rounded-full -mr-16 -mt-16" />
-                    
-                    <div className="relative">
-                      <h3 className="font-serif font-bold text-xl italic mb-6 text-[#a189f2] flex items-center gap-2">
-                        <Sparkles className="w-5 h-5" /> Bloquer une nouvelle date
-                      </h3>
-                      <div className="flex flex-col md:flex-row gap-4">
-                        <div className="flex-1 relative">
-                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#b79ff8]" />
-                          <input 
-                            type="date" value={date} onChange={e => setDate(e.target.value)}
-                            className="w-full bg-[#b79ff8]/5 border border-[#b79ff8]/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#a189f2] focus:ring-4 focus:ring-[#a189f2]/5 transition-all text-[#a189f2] font-bold"
-                          />
-                        </div>
-                        <button 
-                          onClick={blockDate} disabled={!date}
-                          className="bg-gradient-to-r from-[#b79ff8] to-[#a189f2] text-white px-8 py-4 rounded-2xl font-black hover:shadow-xl hover:shadow-[#b79ff8]/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 group"
-                        >
-                          <Lock className="w-5 h-5 group-hover:scale-110 transition-transform" /> 
-                          Confirmer le blocage
-                        </button>
+                  <div className="bg-white rounded-[2.5rem] border border-[#b79ff8]/20 p-8 shadow-sm">
+                    {/* Header avec Navigation du mois */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                      <div>
+                        <h3 className="font-serif font-bold text-3xl italic text-neutral-800 flex items-center gap-3">
+                          <Calendar className="w-8 h-8 text-[#a189f2]" />
+                          {new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(currentMonth)}
+                        </h3>
+                        <p className="text-xs text-neutral-400 font-bold mt-1 uppercase tracking-[0.2em]">Tableau des disponibilités</p>
                       </div>
+
+                      <div className="flex items-center gap-2 bg-neutral-100 p-1.5 rounded-2xl">
+                        <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() - 1)))} className="p-2.5 hover:bg-white rounded-xl transition-all text-neutral-500"><ChevronDown className="w-5 h-5 rotate-90" /></button>
+                        <button onClick={() => setCurrentMonth(new Date())} className="px-4 text-[10px] font-black uppercase tracking-widest text-[#a189f2]">Aujourd'hui</button>
+                        <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() + 1)))} className="p-2.5 hover:bg-white rounded-xl transition-all text-neutral-500"><ChevronDown className="w-5 h-5 -rotate-90" /></button>
+                      </div>
+                    </div>
+
+                    {/* Grille */}
+                    <div className="grid grid-cols-7 text-[#a189f2] gap-2">
+                      {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+                        <div key={day} className="py-2 text-center text-[10px] font-black uppercase text-black">{day}</div>
+                      ))}
+
+                      {(() => {
+                        const { startOffset, daysInMonth, year, month } = getDaysInMonth(currentMonth);
+                        const cells = [];
+                        
+                        for (let i = 0; i < startOffset; i++) cells.push(<div key={`empty-${i}`} className="aspect-square opacity-0" />);
+
+                        for (let d = 1; d <= daysInMonth; d++) {
+                          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                          const occupations = blockedDates.filter((bd: any) => bd.date === dateStr);
+                          const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                          const isOccupied = occupations.length > 0;
+
+                          cells.push(
+                            <div 
+                              key={d} 
+                              className={`group relative aspect-square rounded-[1.3rem] border transition-all p-2 flex flex-col ${
+                                isOccupied ? 'bg-neutral-50/50 border-neutral-100' : 'bg-white border-neutral-100 hover:border-[#a189f2] hover:shadow-md cursor-pointer'
+                              } ${isToday ? 'ring-2 ring-[#a189f2] ring-offset-2' : ''}`}
+                              onClick={() => !isOccupied && blockDate(dateStr)}
+                            >
+                              <span className={`text-xs font-black ${isToday ? 'text-[#a189f2]' : 'text-neutral-400'}`}>{d}</span>
+                              
+                              <div className="mt-1 space-y-1">
+                                {occupations.map((occ: any) => (
+                                  <button 
+                                    key={occ.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // Empêche de déclencher le blockDate de la case
+                                      if(occ.type === 'admin') unblockDate(occ.id);
+                                      else setActiveTab("submissions");
+                                    }}
+                                    className={`w-full text-left text-[8px] font-bold px-1.5 py-1 rounded-lg truncate transition-transform hover:scale-105 flex items-center gap-1 ${
+                                      occ.type === 'admin' ? 'bg-[#a189f2] text-white' : 'bg-emerald-500 text-white'
+                                    }`}
+                                  >
+                                    {occ.type === 'admin' ? <Unlock className="w-2 h-2" /> : <Eye className="w-2 h-2" />}
+                                    {occ.type === 'admin' ? 'Libérer' : occ.label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Overlay au survol pour les cases vides */}
+                              {!isOccupied && (
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[#a189f2]/10 rounded-[1.3rem]">
+                                  <Lock className="w-4 h-4 text-[#a189f2]" />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return cells;
+                      })()}
                     </div>
                   </div>
 
-                  {/* Section : L'Agenda */}
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between px-4">
-                      <h3 className="font-serif font-bold text-2xl italic text-neutral-800">Calendrier des publications</h3>
-                      <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
-                        <div className="flex items-center gap-1.5 text-[#a189f2]">
-                          <span className="w-2 h-2 rounded-full bg-[#a189f2]"></span> Admin
-                        </div>
-                        <div className="flex items-center gap-1.5 text-emerald-500">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Soumission
-                        </div>
-                      </div>
+                  {/* Légende rapide */}
+                  <div className="flex items-center gap-6 px-8 py-4 bg-white rounded-2xl border border-neutral-100 w-fit mx-auto">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-[#a189f2]" />
+                      <span className="text-[10px] font-bold uppercase text-neutral-500">Bloqué (Cliquez pour libérer)</span>
                     </div>
-
-                    <div className="grid grid-cols-1 gap-4">
-                      {blockedDates.length === 0 ? (
-                        <EmptyState icon={Calendar} title="Agenda libre" desc="Aucune date n'est actuellement réservée ou bloquée." />
-                      ) : (
-                        blockedDates.map((d: any) => {
-                          const isAdmin = d.type === 'admin';
-                          const dateObj = new Date(d.date + "T00:00:00");
-                          const dayName = new Intl.DateTimeFormat('fr-FR', { weekday: 'long' }).format(dateObj);
-                          
-                          return (
-                            <div key={d.id} className="group relative bg-white border border-neutral-100 rounded-[2rem] p-2 pr-6 shadow-sm hover:shadow-md transition-all flex items-center gap-6">
-                              
-                              {/* Bloc Date Style Agenda */}
-                              <div className={`flex flex-col items-center justify-center min-w-[100px] h-[100px] rounded-[1.7rem] ${
-                                isAdmin 
-                                ? "bg-gradient-to-br from-[#b79ff8] to-[#a189f2] text-white" 
-                                : "bg-neutral-50 text-neutral-400 border border-neutral-100"
-                              }`}>
-                                <span className="text-[10px] font-black uppercase tracking-tighter opacity-80">{dayName}</span>
-                                <span className="text-3xl font-serif font-bold italic leading-none my-0.5">{dateObj.getDate()}</span>
-                                <span className="text-[10px] font-bold uppercase">{new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(dateObj)}</span>
-                              </div>
-
-                              {/* Contenu */}
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md tracking-widest ${
-                                    isAdmin ? "bg-[#a189f2]/10 text-[#a189f2]" : "bg-emerald-100 text-emerald-600"
-                                  }`}>
-                                    {isAdmin ? 'Indisponible' : 'Réservé'}
-                                  </span>
-                                  <span className="text-neutral-300">•</span>
-                                  <span className="text-xs font-bold text-neutral-400 italic">
-                                    {isAdmin ? "Action Manuelle" : "Formulaire Reçu"}
-                                  </span>
-                                </div>
-                                
-                                <h4 className="font-serif font-bold text-xl text-neutral-800 leading-tight">
-                                  {isAdmin ? "Date bloquée par l'équipe" : `Publication : ${d.label}`}
-                                </h4>
-                                
-                                <div className="flex items-center gap-4 mt-2">
-                                  <div className="flex items-center gap-1.5 text-sm text-neutral-500 font-medium">
-                                    <Clock className="w-4 h-4 text-[#b79ff8]" />
-                                    Toute la journée
-                                  </div>
-                                  {!isAdmin && (
-                                    <div className="flex items-center gap-1.5 text-sm text-neutral-500 font-medium">
-                                      <Instagram className="w-4 h-4 text-[#b79ff8]" />
-                                      {d.label}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Actions contextuelles */}
-                              <div className="flex gap-2">
-                                {isAdmin ? (
-                                  <button 
-                                    onClick={() => unblockDate(d.id)}
-                                    className="w-12 h-12 flex items-center justify-center rounded-2xl bg-red-50 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all duration-300"
-                                    title="Libérer la date"
-                                  >
-                                    <Trash2 className="w-5 h-5" />
-                                  </button>
-                                ) : (
-                                  <button 
-                                    onClick={() => setActiveTab("submissions")}
-                                    className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#b79ff8]/10 text-[#a189f2] opacity-0 group-hover:opacity-100 hover:bg-[#a189f2] hover:text-white transition-all duration-300 shadow-sm"
-                                    title="Voir les détails"
-                                  >
-                                    <Eye className="w-5 h-5" />
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Ligne décorative selon le type */}
-                              <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-12 rounded-r-full ${
-                                isAdmin ? "bg-[#a189f2]" : "bg-emerald-400"
-                              }`} />
-                            </div>
-                          )
-                        })
-                      )}
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <span className="text-[10px] font-bold uppercase text-neutral-500">Soumission (Lecture seule)</span>
                     </div>
                   </div>
                 </div>
