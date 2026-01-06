@@ -22,8 +22,7 @@ import { FORMATS } from "@/lib/formats"
 /* ---------- Configuration Sécurité ---------- */
 const ADMIN_EMAILS = [
   "ryan.deschuyteneer@gmail.com",
-  "autre.email@example.com",
-  "troisieme@domaine.com",
+  "badpetrova121@gmail.com"
 ]; // REMPLACEZ PAR VOTRE EMAIL
 
 /* ---------- Helpers ---------- */
