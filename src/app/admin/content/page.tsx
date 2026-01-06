@@ -255,14 +255,34 @@ export default function AdminDashboard() {
 
           <div className="lg:col-span-4">
             <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-xl shadow-purple-50 p-8 sticky top-32 space-y-8">
+              
+              {/* AJOUT : BOUTON RETOUR DASHBOARD PRINCIPAL */}
+              <a 
+                href="/admin" 
+                className="flex items-center justify-between p-4 bg-gradient-to-r from-neutral-900 to-neutral-800 rounded-2xl text-white hover:scale-[1.02] transition-all group shadow-lg shadow-neutral-200"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/10 rounded-xl">
+                    <Layout className="w-5 h-5" />
+                  </div>
+                  <span className="font-bold text-sm tracking-tight">Retour Dashboard</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/50 group-hover:translate-x-1 transition-transform" />
+              </a>
+
+              <div className="h-px bg-neutral-100" />
+
               <h3 className="font-serif font-bold text-lg text-[#a189f2] flex items-center gap-3">
                 <Edit3 className="w-5 h-5 text-[#a189f2]" /> Actions
               </h3>
+              
               <div className="space-y-3">
                 <button onClick={() => setExpandedSections(new Set(['header', 'hero', 'formats', 'progress', 'success']))} className="w-full py-4 bg-[#fdfcff] hover:bg-[#f3f0ff] border border-[#f3f0ff] rounded-2xl text-xs font-bold text-[#a189f2] uppercase tracking-widest transition-all">Tout déplier</button>
                 <button onClick={() => setExpandedSections(new Set())} className="w-full py-4 bg-neutral-50 rounded-2xl text-xs font-bold text-neutral-400 uppercase tracking-widest transition-all">Tout replier</button>
+                
                 <div className="h-px bg-neutral-100 my-4" />
-                <button onClick={() => confirm("Réinitialiser ?") && setContent(defaultContent)} className="w-full py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all">Réinitialiser</button>
+                
+                <button onClick={() => confirm("Réinitialiser ?") && setContent(defaultContent)} className="w-full py-4 bg-red-50 text-red-500 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all">Réinitialiser les textes</button>
               </div>
 
               <div className="pt-6 border-t border-neutral-50">
