@@ -33,6 +33,7 @@ export const FORMATS: Record<FormatKey, Format> = {
       { id: "suffering_character", label: "Un personnage que tu fais souffrir ?", type: "text" },
       { id: "this_or_that", label: "Jouons a un petit jeu: Slow burn ou fast burn ? Happy ou sad ending ? Cliffhanger ou chapitre safe? Explique brièvement ton choix.", type: "textarea" },
       { id: "fun_fact", label: "Un fun fact sur toi ?", type: "text" },
+      { id: "socials", label: "Autres réseaux sociaux (TikTok, Instagram, Wattpad, Fyctia)", type: "text" },
     ],
     images: ["author_photo", "cover_photo"],
   },
@@ -80,6 +81,7 @@ export const FORMATS: Record<FormatKey, Format> = {
       { id: "talks_about_book", label: "Je souhaite parler de mon roman dans ce post (optionnel)", type: "checkbox" },
       { id: "cover", label: "Couverture de ton roman", type: "image" },
       { id: "book_title", label: "Titre de ton roman", type: "text" },
+      { id: "socials", label: "Autres réseaux sociaux (TikTok, Instagram, Wattpad, Fyctia)", type: "text" },
     ],
     
     // Configuration détaillée pour chaque sous-format
