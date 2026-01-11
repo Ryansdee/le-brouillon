@@ -18,12 +18,16 @@ import {
   Sparkles
 } from "lucide-react"
 import { FORMATS } from "@/lib/formats"
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  LineChart, Line, CartesianGrid, Legend
+} from "recharts"
 
 /* ---------- Configuration Sécurité ---------- */
 const ADMIN_EMAILS = [
   "ryan.deschuyteneer@gmail.com",
   "badpetrova121@gmail.com"
-]; // REMPLACEZ PAR VOTRE EMAIL
+]; 
 
 /* ---------- Helpers ---------- */
 const isUrl = (v: string) => typeof v === "string" && v.startsWith("http")
@@ -45,9 +49,11 @@ interface Submission {
 interface BlockedDate {
   id: string
   date: string
+  type?: 'admin' | 'submission'
+  label?: string
 }
 
-type Tab = "overview" | "submissions" | "dates"
+type Tab = "overview" | "submissions" | "dates" | "wrapped" | "analytics"
 
 export default function AdminDashboard() {
   // Auth States
@@ -64,18 +70,42 @@ export default function AdminDashboard() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  // Stats Instagram (chargées depuis l'API)
+  const [instagramStats, setInstagramStats] = useState<{
+    mostLikedPost: {
+      url: string
+      likes: number
+      caption: string
+    } | null
+  }>({ mostLikedPost: null })
+  useEffect(() => {
+  fetch("/api/top-post")
+    .then(res => res.json())
+    .then(data => {
+      if (data?.url && typeof data.likeCount === "number") {
+        setInstagramStats({
+          mostLikedPost: {
+            url: data.url,
+            likes: data.likeCount,
+            caption: data.caption || "@lebrouillon.mag"
+          }
+        })
+      }
+    })
+    .catch(err => console.error("Erreur chargement stats Instagram:", err))
+}, [])
 
-const getDaysInMonth = (date: Date) => {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const firstDay = new Date(year, month, 1).getDay(); // 0 (Dim) à 6 (Sam)
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  
-  // Ajustement pour commencer par Lundi (0=Lun, 6=Dim)
-  const startOffset = firstDay === 0 ? 6 : firstDay - 1;
-  
-  return { startOffset, daysInMonth, year, month };
-};
+
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+    return { startOffset, daysInMonth, year, month };
+  };
 
   // Monitor Auth State
   useEffect(() => {
@@ -84,7 +114,6 @@ const getDaysInMonth = (date: Date) => {
         setUser(currentUser)
         loadData()
       } else if (currentUser) {
-        // Connecté mais pas admin
         signOut(auth)
         alert("Accès refusé : vous n'êtes pas administrateur.")
       } else {
@@ -98,35 +127,31 @@ const getDaysInMonth = (date: Date) => {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      // 1. Récupérer les dates bloquées (Admin)
       const datesSnap = await getDocs(collection(db, "blocked_dates"))
       const adminBlocked = datesSnap.docs.map(d => ({ 
         id: d.id, 
-        date: d.data().date, // Format "2026-01-19" selon vos données
-        type: 'admin',
+        date: d.data().date,
+        type: 'admin' as const,
         label: 'Administrateur'
       }))
 
-      // 2. Récupérer les soumissions (Clients)
       const submissionsSnap = await getDocs(query(collection(db, "submissions"), orderBy("createdAt", "desc")))
       const subsData = submissionsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Submission[]
       
       setSubmissions(subsData)
 
-      // 3. Transformer les soumissions en "dates occupées" pour l'agenda
       const submissionBlocked = subsData.map(s => ({
         id: s.id,
-        date: s.date, // Format "2026-01-14" selon vos données
-        type: 'submission',
-        label: `@${s.instagram}` // Utilise le champ instagram de votre DB
+        date: s.date,
+        type: 'submission' as const,
+        label: `@${s.instagram}`
       }))
 
-      // 4. Fusionner les deux listes et trier chronologiquement
       const allOccupiedDates = [...adminBlocked, ...submissionBlocked].sort((a, b) => 
         a.date.localeCompare(b.date)
       )
       
-      setBlockedDates(allOccupiedDates as any) 
+      setBlockedDates(allOccupiedDates) 
     } catch (error) {
       console.error("Erreur lors du chargement:", error)
     }
@@ -134,11 +159,7 @@ const getDaysInMonth = (date: Date) => {
   }
 
   const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider)
-    } catch (error) {
-      console.error("Login error:", error)
-    }
+    try { await signInWithPopup(auth, googleProvider) } catch (error) { console.error(error) }
   }
 
   const handleLogout = () => signOut(auth)
@@ -149,36 +170,30 @@ const getDaysInMonth = (date: Date) => {
     setExpandedSubmissions(s)
   }
 
-const blockDate = async (manualDate?: string) => {
-  const dateToBlock = manualDate || date; // Utilise la date passée ou celle du state
-  if (!dateToBlock) return;
-
-  // 1. Vérifier si la date est déjà occupée (Admin ou Client)
-  const isAlreadyOccupied = blockedDates.some(d => d.date === dateToBlock);
-  if (isAlreadyOccupied) {
-    alert("Cette date est déjà occupée ou bloquée.");
-    return;
-  }
-
-  try {
-    const docRef = await addDoc(collection(db, "blocked_dates"), {
-      date: dateToBlock,
-      createdAt: new Date().toISOString()
-    });
-    
-    // Mettre à jour l'état local immédiatement
-    setBlockedDates(prev => [...prev, { 
-      id: docRef.id, 
-      date: dateToBlock, 
-      type: 'admin', 
-      label: 'Administrateur' 
-    }].sort((a,b) => a.date.localeCompare(b.date)));
-    
-    if(!manualDate) setDate(""); // Reset le champ si c'était manuel
-  } catch (error) {
-    console.error("Erreur blocage:", error);
-  }
-};
+  const blockDate = async (manualDate?: string) => {
+    const dateToBlock = manualDate || date;
+    if (!dateToBlock) return;
+    if (blockedDates.some(d => d.date === dateToBlock)) {
+      alert("Cette date est déjà occupée ou bloquée.");
+      return;
+    }
+    try {
+      const docRef = await addDoc(collection(db, "blocked_dates"), {
+        date: dateToBlock,
+        createdAt: new Date().toISOString()
+      });
+      setBlockedDates(prev => [
+        ...prev,
+        { 
+          id: docRef.id, 
+          date: dateToBlock, 
+          type: 'admin' as const, // Explicitly type 'admin' as a string literal
+          label: 'Administrateur' 
+        }
+      ].sort((a, b) => a.date.localeCompare(b.date)));
+      if(!manualDate) setDate("");
+    } catch (error) { console.error(error); }
+  };
 
   const unblockDate = async (id: string) => {
     await deleteDoc(doc(db, "blocked_dates", id))
@@ -194,15 +209,73 @@ const blockDate = async (manualDate?: string) => {
   const formatDateFr = (d: string) =>
     new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(d + "T00:00:00"))
 
-  // Stats
-  const today = new Date().toISOString().split("T")[0]
-  const upcoming = submissions.filter(s => s.date >= today).length
+  // --- Stats & Wrapped Logic ---
+  const now = new Date()
+  const todayStr = now.toISOString().split("T")[0]
+  
+  const submissionsThisMonth = submissions.filter(s => {
+    const d = new Date(s.createdAt?.seconds ? s.createdAt.seconds * 1000 : s.date)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  })
+
+  const submissionsThisYear = submissions.filter(s => {
+    const d = new Date(s.createdAt?.seconds ? s.createdAt.seconds * 1000 : s.date)
+    return d.getFullYear() === now.getFullYear()
+  })
+
+  const countByFormat = (subs: Submission[]) => {
+    const map: Record<string, number> = {}
+    subs.forEach(s => { map[s.format] = (map[s.format] || 0) + 1 })
+    return map
+  }
+
+  const busiestDay = (subs: Submission[]) => {
+    const map: Record<string, number> = {}
+    subs.forEach(s => { map[s.date] = (map[s.date] || 0) + 1 })
+    return Object.entries(map).sort((a,b) => b[1] - a[1])[0]
+  }
+
+  const getTopFormat = (formats: Record<string, number>) => {
+    const entries = Object.entries(formats);
+    if (entries.length === 0) return null;
+    return entries.sort((a, b) => b[1] - a[1])[0];
+  };
+
+  const wrappedMonth = {
+    total: submissionsThisMonth.length,
+    formats: countByFormat(submissionsThisMonth),
+    busiestDay: busiestDay(submissionsThisMonth),
+    topFormat: getTopFormat(countByFormat(submissionsThisMonth))
+  }
+
+  const wrappedYear = {
+    total: submissionsThisYear.length,
+    formats: countByFormat(submissionsThisYear),
+    busiestDay: busiestDay(submissionsThisYear),
+    topFormat: getTopFormat(countByFormat(submissionsThisYear))
+  }
+
+  const formatStats = Object.entries(countByFormat(submissions)).map(([f, count]) => ({
+    format: FORMATS[f as keyof typeof FORMATS]?.label || f,
+    count
+  }))
+
+  const monthlyStats = (() => {
+    const map: Record<string, number> = {}
+    submissions.forEach(s => {
+      const d = s.createdAt?.seconds ? new Date(s.createdAt.seconds * 1000) : new Date(s.date)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      map[key] = (map[key] || 0) + 1
+    })
+    return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([month, count]) => ({ month, count }))
+  })()
+
+  const upcoming = submissions.filter(s => s.date >= todayStr).length
   const thisWeek = submissions.filter(s => {
-    const diff = new Date(s.date).getTime() - new Date(today).getTime()
+    const diff = new Date(s.date).getTime() - new Date(todayStr).getTime()
     return diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000
   }).length
 
-  // Écran de chargement Auth
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fcfaff]">
@@ -214,7 +287,6 @@ const blockDate = async (manualDate?: string) => {
     )
   }
 
-  // Écran de Login
   if (!user) {
     return (
       <div className="min-h-screen bg-[#fcfaff] flex items-center justify-center p-4">
@@ -267,42 +339,53 @@ const blockDate = async (manualDate?: string) => {
             <p className="text-[#b79ff8] text-xs mt-1 uppercase tracking-widest font-semibold">Le Brouillon</p>
           </div>
         </div>
-          <nav className="space-y-1">
-            <SidebarItem 
-              icon={BarChart3} label="Vue générale" active={activeTab === "overview"} 
-              onClick={() => { setActiveTab("overview"); setMobileMenuOpen(false); }} 
-            />
-            <SidebarItem 
-              icon={FileText} label="Soumissions" badge={submissions.length} active={activeTab === "submissions"} 
-              onClick={() => { setActiveTab("submissions"); setMobileMenuOpen(false); }} 
-            />
-            <SidebarItem 
-              icon={Calendar} label="Dates bloquées" badge={blockedDates.length} active={activeTab === "dates"} 
-              onClick={() => { setActiveTab("dates"); setMobileMenuOpen(false); }} 
-            />
-            
-            <div className="pt-4 mt-4 border-t border-[#b79ff8]/10">
-              <p className="px-4 mb-2 text-[10px] font-black uppercase tracking-widest text-[#b79ff8]">Ressources</p>
-              
-              {/* LIEN EXISTANT VERS LE CONTENU */}
-              <a 
-                href="/admin/content" 
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#b79ff8] hover:bg-[#b79ff8]/10 hover:text-[#a189f2] transition-all duration-200 group"
-              >
-                <File className="w-5 h-5" strokeWidth={1.5} />
-                <span className="font-bold text-sm">Gérer le contenu</span>
-              </a>
 
-              {/* NOUVEAU LIEN VERS LE PARAMÉTRAGE DES QUESTIONS */}
-              <a 
-                href="/admin/questions-settings" 
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#b79ff8] hover:bg-[#b79ff8]/10 hover:text-[#a189f2] transition-all duration-200 group"
-              >
-                <Sparkles className="w-5 h-5" strokeWidth={1.5} />
-                <span className="font-bold text-sm">Réglages Formulaires</span>
-              </a>
-            </div>
-          </nav>
+        <nav className="space-y-1">
+          <SidebarItem 
+            icon={BarChart3} label="Vue générale" active={activeTab === "overview"} 
+            onClick={() => { setActiveTab("overview"); setMobileMenuOpen(false); }} 
+          />
+          <SidebarItem 
+            icon={FileText} label="Soumissions" badge={submissions.length} active={activeTab === "submissions"} 
+            onClick={() => { setActiveTab("submissions"); setMobileMenuOpen(false); }} 
+          />
+          <SidebarItem 
+            icon={Calendar} label="Dates bloquées" badge={blockedDates.length} active={activeTab === "dates"} 
+            onClick={() => { setActiveTab("dates"); setMobileMenuOpen(false); }} 
+          />
+          <SidebarItem 
+            icon={BarChart3}
+            label="Analytics"
+            active={activeTab === "analytics"} 
+            onClick={() => { setActiveTab("analytics"); setMobileMenuOpen(false); }} 
+          />
+          <SidebarItem 
+            icon={Sparkles}
+            label="Wrapped"
+            active={activeTab === "wrapped"} 
+            onClick={() => { setActiveTab("wrapped"); setMobileMenuOpen(false); }} 
+          />
+          
+          <div className="pt-4 mt-4 border-t border-[#b79ff8]/10">
+            <p className="px-4 mb-2 text-[10px] font-black uppercase tracking-widest text-[#b79ff8]">Ressources</p>
+            
+            <a 
+              href="/admin/content" 
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#b79ff8] hover:bg-[#b79ff8]/10 hover:text-[#a189f2] transition-all duration-200 group"
+            >
+              <File className="w-5 h-5" strokeWidth={1.5} />
+              <span className="font-bold text-sm">Gérer le contenu</span>
+            </a>
+
+            <a 
+              href="/admin/questions-settings" 
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#b79ff8] hover:bg-[#b79ff8]/10 hover:text-[#a189f2] transition-all duration-200 group"
+            >
+              <Sparkles className="w-5 h-5" strokeWidth={1.5} />
+              <span className="font-bold text-sm">Réglages Formulaires</span>
+            </a>
+          </div>
+        </nav>
 
         <div className="mt-auto space-y-4">
           <div className="bg-[#b79ff8]/5 rounded-xl p-4 border border-[#b79ff8]/20">
@@ -332,11 +415,15 @@ const blockDate = async (manualDate?: string) => {
                 {activeTab === "overview" && "Tableau de bord"}
                 {activeTab === "submissions" && "Soumissions"}
                 {activeTab === "dates" && "Gestion du calendrier"}
+                {activeTab === "analytics" && "Analytics"}
+                {activeTab === "wrapped" && "Wrapped"}
               </h1>
               <p className="text-neutral-500 text-sm mt-1">
                 {activeTab === "overview" && "Aperçu de l'activité du magazine."}
                 {activeTab === "submissions" && `${submissions.length} formulaires reçus.`}
                 {activeTab === "dates" && "Définissez les jours indisponibles."}
+                {activeTab === "analytics" && "Statistiques détaillées."}
+                {activeTab === "wrapped" && "Votre année en créativité."}
               </p>
             </div>
             {activeTab === "submissions" && (
@@ -363,7 +450,7 @@ const blockDate = async (manualDate?: string) => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <StatCard icon={FileText} label="Total Soumissions" value={submissions.length} color="purple" />
                     <StatCard icon={Clock} label="À paraître" value={upcoming} color="emerald" trend={`${thisWeek} cette semaine`} />
-                    <StatCard icon={Lock} label="Dates bloquées" value={blockedDates.length} color="purple" />
+                    <StatCard icon={Lock} label="Dates bloquées" value={blockedDates.filter(d => d.type === 'admin').length} color="purple" />
                   </div>
 
                   <div className="bg-white rounded-2xl border border-[#b79ff8]/20 shadow-sm overflow-hidden">
@@ -402,7 +489,7 @@ const blockDate = async (manualDate?: string) => {
                   ) : (
                     submissions.map((sub) => {
                       const isOpen = expandedSubmissions.has(sub.id)
-                      const isPast = sub.date < today
+                      const isPast = sub.date < todayStr
                       return (
                         <div key={sub.id} className="bg-white border border-[#b79ff8]/20 rounded-2xl overflow-hidden hover:border-[#a189f2]/40 transition-all shadow-sm">
                           <div className="p-4 sm:p-6 flex items-center justify-between">
@@ -474,7 +561,6 @@ const blockDate = async (manualDate?: string) => {
                 <div className="space-y-8 max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
                   
                   <div className="bg-white rounded-[2.5rem] border border-[#b79ff8]/20 p-8 shadow-sm">
-                    {/* Header avec Navigation du mois */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                       <div>
                         <h3 className="font-serif font-bold text-3xl italic text-neutral-800 flex items-center gap-3">
@@ -491,7 +577,6 @@ const blockDate = async (manualDate?: string) => {
                       </div>
                     </div>
 
-                    {/* Grille */}
                     <div className="grid grid-cols-7 text-[#a189f2] gap-2">
                       {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
                         <div key={day} className="py-2 text-center text-[10px] font-black uppercase text-black">{day}</div>
@@ -505,7 +590,7 @@ const blockDate = async (manualDate?: string) => {
 
                         for (let d = 1; d <= daysInMonth; d++) {
                           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                          const occupations = blockedDates.filter((bd: any) => bd.date === dateStr);
+                          const occupations = blockedDates.filter((bd: BlockedDate) => bd.date === dateStr);
                           const isToday = new Date().toISOString().split('T')[0] === dateStr;
                           const isOccupied = occupations.length > 0;
 
@@ -520,11 +605,11 @@ const blockDate = async (manualDate?: string) => {
                               <span className={`text-xs font-black ${isToday ? 'text-[#a189f2]' : 'text-neutral-400'}`}>{d}</span>
                               
                               <div className="mt-1 space-y-1">
-                                {occupations.map((occ: any) => (
+                                {occupations.map((occ: BlockedDate) => (
                                   <button 
                                     key={occ.id}
                                     onClick={(e) => {
-                                      e.stopPropagation(); // Empêche de déclencher le blockDate de la case
+                                      e.stopPropagation();
                                       if(occ.type === 'admin') unblockDate(occ.id);
                                       else setActiveTab("submissions");
                                     }}
@@ -538,7 +623,6 @@ const blockDate = async (manualDate?: string) => {
                                 ))}
                               </div>
 
-                              {/* Overlay au survol pour les cases vides */}
                               {!isOccupied && (
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[#a189f2]/10 rounded-[1.3rem]">
                                   <Lock className="w-4 h-4 text-[#a189f2]" />
@@ -552,7 +636,6 @@ const blockDate = async (manualDate?: string) => {
                     </div>
                   </div>
 
-                  {/* Légende rapide */}
                   <div className="flex items-center gap-6 px-8 py-4 bg-white rounded-2xl border border-neutral-100 w-fit mx-auto">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-[#a189f2]" />
@@ -563,6 +646,135 @@ const blockDate = async (manualDate?: string) => {
                       <span className="text-[10px] font-bold uppercase text-neutral-500">Soumission (Lecture seule)</span>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ANALYTICS */}
+              {activeTab === "analytics" && (
+                <div className="space-y-12 max-w-6xl mx-auto">
+                  <div className="bg-white p-8 rounded-3xl border border-[#b79ff8]/20 shadow-sm">
+                    <h2 className="font-serif text-2xl italic text-[#a189f2] mb-6">Soumissions par format</h2>
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={formatStats}>
+                          <XAxis dataKey="format" fontSize={10} />
+                          <YAxis fontSize={10} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="#a189f2" radius={[6,6,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-3xl border border-[#b79ff8]/20 shadow-sm">
+                    <h2 className="font-serif text-2xl italic text-[#a189f2] mb-6">Évolution mensuelle</h2>
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={monthlyStats}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" fontSize={10} />
+                          <YAxis fontSize={10} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="count" stroke="#a189f2" strokeWidth={3} dot={{ r: 6 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* WRAPPED */}
+              {activeTab === "wrapped" && (
+                <div className="max-w-5xl mx-auto space-y-12 pb-20 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                  <div className="text-center space-y-4">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#b79ff8] to-[#a189f2] text-white rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-purple-200">
+                      <Sparkles className="w-4 h-4" />
+                      Flashback {now.getFullYear()}
+                    </div>
+                    <h2 className="text-5xl md:text-6xl font-serif font-bold italic text-[#a189f2]">Votre année en <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#b79ff8] via-[#a189f2] to-[#8a71d6]">créativité.</span></h2>
+                  </div>
+
+                  <section className="space-y-6">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-[#b79ff8] flex items-center gap-4">
+                      Ce mois-ci 
+                      <div className="h-[1px] flex-1 bg-gradient-to-r from-[#b79ff8]/30 to-transparent"></div>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="bg-[#a189f2] p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
+                        <FileText className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10 rotate-12 transition-transform" />
+                        <p className="text-xs font-bold uppercase tracking-widest opacity-80">Total Soumissions</p>
+                        <p className="text-7xl font-serif font-bold my-4 italic">{wrappedMonth.total}</p>
+                        <p className="text-sm font-medium opacity-90">Projets reçus.</p>
+                      </div>
+                      <div className="bg-white p-8 rounded-[2.5rem] border-2 border-[#b79ff8]/20 shadow-sm relative overflow-hidden">
+                        <TrendingUp className="text-[#a189f2] w-10 h-10 mb-6" />
+                        <p className="text-xs font-bold uppercase tracking-widest text-[#b79ff8]">Format Favori</p>
+                        <p className="text-3xl font-serif font-bold text-[#a189f2] mt-4 italic">
+                          {wrappedMonth.topFormat ? (FORMATS[wrappedMonth.topFormat[0] as keyof typeof FORMATS]?.label || wrappedMonth.topFormat[0]) : "N/A"}
+                        </p>
+                        <p className="text-xs text-neutral-400 mt-2">Le plus populaire du moment.</p>
+                      </div>
+                      <div className="bg-[#1a1625] p-8 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-between group hover:scale-105 transition-transform cursor-pointer"
+                            onClick={() => instagramStats.mostLikedPost && window.open(instagramStats.mostLikedPost.url, '_blank')}
+                          >
+                        <Instagram className="w-10 h-10 mb-6 text-[#b79ff8]" />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-widest text-[#b79ff8] mb-4">Post le plus liké</p>
+                          <p className="text-2xl font-serif font-bold italic text-white leading-tight line-clamp-2">
+                            {instagramStats.mostLikedPost ? instagramStats.mostLikedPost.caption : "Chargement..."}
+                          </p>
+                          <div className="flex items-center gap-2 mt-3">
+                            <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full">
+                              <span className="text-lg">❤️</span>
+                              <span className="text-sm font-black">
+                                {instagramStats.mostLikedPost ? instagramStats.mostLikedPost.likes : "---"}
+                              </span>
+                            </div>
+                            {instagramStats.mostLikedPost && (
+                              <span className="text-[10px] text-[#b79ff8] uppercase font-bold">Cliquez pour voir</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="bg-gradient-to-br from-[#b79ff8] to-[#8a71d6] rounded-[3rem] p-10 md:p-16 text-white relative overflow-hidden shadow-2xl">
+                    <div className="relative z-10 flex flex-col md:flex-row gap-12 items-center">
+                        <div className="flex-1 space-y-6 text-center md:text-left">
+                          <h4 className="text-6xl md:text-8xl font-serif font-bold italic leading-none">L'année <br/> de tous les <br/> records.</h4>
+                          <div className="flex flex-wrap gap-4 justify-center md:justify-start">
+                             <div className="bg-white/20 backdrop-blur-md px-6 py-3 rounded-2xl">
+                                <p className="text-[10px] font-black uppercase opacity-80">Total {now.getFullYear()}</p>
+                                <p className="text-3xl font-bold">{wrappedYear.total}</p>
+                             </div>
+                             <div className="bg-white/20 backdrop-blur-md px-6 py-3 rounded-2xl">
+                                <p className="text-[10px] font-black uppercase opacity-80">Top Genre</p>
+                                <p className="text-3xl font-bold">{wrappedYear.topFormat ? (FORMATS[wrappedYear.topFormat[0] as keyof typeof FORMATS]?.label.split(' ')[0]) : "N/A"}</p>
+                             </div>
+                          </div>
+                        </div>
+                        <div className="w-full md:w-72 space-y-5">
+                          <p className="text-xs font-black uppercase tracking-widest opacity-80 text-center mb-4">Répartition</p>
+                          {Object.entries(wrappedYear.formats).map(([f, c]) => {
+                            const percent = Math.round((c / (wrappedYear.total || 1)) * 100);
+                            return (
+                              <div key={f} className="space-y-1">
+                                <div className="flex justify-between text-[10px] font-black uppercase">
+                                  <span>{FORMATS[f as keyof typeof FORMATS]?.label || f}</span>
+                                  <span>{percent}%</span>
+                                </div>
+                                <div className="h-1.5 bg-black/10 rounded-full overflow-hidden">
+                                  <div className="h-full bg-white rounded-full transition-all duration-1000" style={{ width: `${percent}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                    </div>
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
+                  </section>
                 </div>
               )}
             </div>
